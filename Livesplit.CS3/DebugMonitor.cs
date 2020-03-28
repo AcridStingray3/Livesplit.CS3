@@ -1,7 +1,10 @@
 ﻿using System;
-using System.Diagnostics.CodeAnalysis;
+using System.Data.SqlClient;
+using System.Diagnostics;
+using System.IO.MemoryMappedFiles;
+using System.Security.AccessControl;
 using System.Threading;
-using System.Runtime.InteropServices;
+using System.Text;
 
 
 namespace Livesplit.CS3
@@ -12,315 +15,108 @@ namespace Livesplit.CS3
 //Also a bunch of Rider suggestions and warnings
 //Sometimes becomes unable to MapViewOfFile. This seems to be fixed by launching LiveSplit as administrator
 
-
-    public delegate void OnOutputDebugStringHandler(int pid, string text);
-
-  
-
-    public static class DebugMonitor
+    
+    public class DebugMonitor : IDisposable
     {
-        private static int _pid;
+        public delegate void OnOutputDebugStringHandler(int pid, string text);
+        public OnOutputDebugStringHandler OnOutputDebugString;
 
-        #region Win32 API Imports
+        private readonly MemoryMappedFile _mmf;
+        private readonly MemoryMappedViewAccessor _mmfAccessor;
+        private readonly EventWaitHandle _bufferReadyEvent;
+        private readonly EventWaitHandle _dataReadyEvent;
+        private readonly int _monitoredPid;
+        private bool _wantStop; // bools are inherently atomic, no lock needed
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct SecurityDescriptor
+        public DebugMonitor(int pid)
         {
-            private readonly byte revision;
-            private readonly byte size;
-            private readonly short control;
-            private readonly IntPtr owner;
-            private readonly IntPtr group;
-            private readonly IntPtr sacl;
-            private readonly IntPtr dacl;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct SecurityAttributes
-        {
-            private readonly int nLength;
-            private readonly IntPtr lpSecurityDescriptor;
-            private readonly int bInheritHandle;
-        }
-
-        [Flags]
-        [SuppressMessage("ReSharper", "UnusedMember.Local")]
-        private enum PageProtection : uint
-        { 
-            
-            NoAccess = 0x01,
-            Readonly = 0x02,
-            ReadWrite = 0x04,
-            WriteCopy = 0x08,
-            Execute = 0x10,
-            ExecuteRead = 0x20,
-            ExecuteReadWrite = 0x40,
-            ExecuteWriteCopy = 0x80,
-            Guard = 0x100,
-            NoCache = 0x200,
-            WriteCombine = 0x400,
-        }
-        
-        private const uint SecurityDescriptorRevision = 1;
-
-        private const uint SectionMapRead = 0x0004;
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr MapViewOfFile(IntPtr hFileMappingObject, uint
-                dwDesiredAccess, uint dwFileOffsetHigh, uint dwFileOffsetLow,
-            uint dwNumberOfBytesToMap);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool UnmapViewOfFile(IntPtr lpBaseAddress);
-
-        [DllImport("advapi32.dll", SetLastError = true)]
-        private static extern bool InitializeSecurityDescriptor(ref SecurityDescriptor sd, uint dwRevision);
-
-        [DllImport("advapi32.dll", SetLastError = true)]
-        private static extern bool SetSecurityDescriptorDacl(ref SecurityDescriptor sd, bool daclPresent,
-            IntPtr dacl,
-            bool daclDefaulted);
-
-        [DllImport("kernel32.dll",SetLastError = true)]
-        private static extern IntPtr CreateEvent(ref SecurityAttributes sa, bool bManualReset, bool bInitialState,
-            string lpName);
-        
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr OpenEvent(PageProtection dwDesiredAccess, bool bInheritHandle, string lpName);
-
-        [DllImport("kernel32.dll")]
-        private static extern bool PulseEvent(IntPtr hEvent);
-
-        [DllImport("kernel32.dll")]
-        private static extern bool SetEvent(IntPtr hEvent);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr CreateFileMapping(IntPtr hFile,
-            ref SecurityAttributes lpFileMappingAttributes, PageProtection flProtect, uint dwMaximumSizeHigh,
-            uint dwMaximumSizeLow, string lpName);
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr OpenFileMapping(PageProtection flProtect, bool inheritHandle, string lpName);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool CloseHandle(IntPtr hHandle);
-
-        #endregion
-
-
-        public static event OnOutputDebugStringHandler OnOutputDebugString;
-
-        private static IntPtr _mAckEvent = IntPtr.Zero;
-
-        private static IntPtr _mReadyEvent = IntPtr.Zero;
-
-        private static IntPtr _mSharedFile = IntPtr.Zero;
-
-        private static IntPtr _mSharedMem = IntPtr.Zero;
-
-        private static Thread _mCapturer;
-
-        private static readonly object MSyncRoot = new object();
-
-        private static Mutex _mMutex;
-
-
-        public static void Start(int receivedPid)
-        {
-            
-            if (_mCapturer != null)
-                throw new ApplicationException("This DebugMonitor is already started.");
-
-            if (Environment.OSVersion.ToString().IndexOf("Microsoft", StringComparison.Ordinal) == -1)
-                throw new NotSupportedException(
-                    "This DebugMonitor is only supported on Microsoft operating systems.");
-
-            bool createdNew;
-            _mMutex = new Mutex(false, typeof(DebugMonitor).Namespace, out createdNew);
-            if (!createdNew)
-                throw new ApplicationException("There is already an instance of 'DbMon.NET' running.");
-
-            SecurityDescriptor sd = new SecurityDescriptor();
-
-            if (!InitializeSecurityDescriptor(ref sd, SecurityDescriptorRevision))
-            {
-                throw CreateApplicationException("Failed to initializes the security descriptor.");
-            }
-
-            if (!SetSecurityDescriptorDacl(ref sd, true, IntPtr.Zero, false))
-            {
-                throw CreateApplicationException("Failed to initializes the security descriptor");
-            }
-
-            SecurityAttributes sa = new SecurityAttributes();
-
-            _mAckEvent = CreateEvent(ref sa, false, false, "DBWIN_BUFFER_READY");
-            if (_mAckEvent == IntPtr.Zero)
-            {
-                _mAckEvent = OpenEvent(PageProtection.Readonly, false, "DBWIN_BUFFER_READY");
-                System.Diagnostics.Debug.WriteLine("Opened buffer ready");
-                if (_mAckEvent == IntPtr.Zero)
+            try {
+                _mmf = MemoryMappedFile.CreateOrOpen("DBWIN_BUFFER", 4096, MemoryMappedFileAccess.Read);
+                
+                
+                _mmfAccessor = _mmf.CreateViewAccessor(0, 4096, MemoryMappedFileAccess.Read);
+                try
                 {
-                    throw CreateApplicationException("Failed to create event 'DBWIN_BUFFER_READY'");
+                    _bufferReadyEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "DBWIN_BUFFER_READY");
+
                 }
-            }
-
-            _mReadyEvent = CreateEvent(ref sa, false, false, "DBWIN_DATA_READY");
-            if (_mReadyEvent == IntPtr.Zero)
-            {
-                _mReadyEvent = OpenEvent(PageProtection.Readonly, false, "DBWIN_DATA_READY");
-                if (_mReadyEvent == IntPtr.Zero)
+                catch
                 {
-                    throw CreateApplicationException("Failed to create event 'DBWIN_DATA_READY'");
+                    _bufferReadyEvent = EventWaitHandle.OpenExisting("DBWIN_BUFFER_READY", EventWaitHandleRights.ReadPermissions | EventWaitHandleRights.Modify );    
+                    Debug.WriteLine("Opened buffer");
                 }
-            }
 
-            _mSharedFile = CreateFileMapping(new IntPtr(-1), ref sa, PageProtection.Readonly, 0, 4096,
-                "DBWIN_BUFFER");
-            if (_mSharedFile == IntPtr.Zero)
-            {
-                _mSharedFile = OpenFileMapping(PageProtection.Readonly, false, "DBWIN_BUFFER");
-                if (_mSharedFile == IntPtr.Zero)
+                try
                 {
-                    throw CreateApplicationException("Failed to create a file mapping to slot 'DBWIN_BUFFER'");
+                    _dataReadyEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "DBWIN_DATA_READY");
                 }
+                catch
+                {
+                    _dataReadyEvent = EventWaitHandle.OpenExisting("DBWIN_DATA_READY", EventWaitHandleRights.ReadPermissions);
+                    Debug.WriteLine("Opened data");
+                }
+               
+                _monitoredPid = pid;
+                _wantStop = false;
+            } catch (Exception e) {
+                Dispose();
+                throw e;
             }
-
-            //This is the thing that refuses to work sometimes if you're not admin
-            _mSharedMem = MapViewOfFile(_mSharedFile, SectionMapRead, 0, 0, 512);
-            
-            if (_mSharedMem == IntPtr.Zero)
-            {
-                throw CreateApplicationException("Failed to create a mapping view for slot 'DBWIN_BUFFER' " + _mSharedFile.ToString());
-            }
-
-            _pid = receivedPid;
-            _mCapturer = new Thread(Capture);
-            _mCapturer.Start();
-            System.Diagnostics.Debug.WriteLine("Started the monitor");
-
-            
         }
 
-        private static void Capture()
+        public void Run()
         {
-            try
-            {
-                IntPtr pString = new IntPtr(
-                    _mSharedMem.ToInt64() + Marshal.SizeOf(typeof(int))
-                );
+            new Thread(() => {
+                byte[] messageBuffer = new byte[4096 - sizeof(int)];
 
-                while (true)
-                {
+                _bufferReadyEvent.Set();
+                while (true) {
                     
-                    SetEvent(_mAckEvent);
-
-                    if (_mCapturer == null)
+                    if (_wantStop) // check if we want to exit
                         break;
 
-                    if (_pid == Marshal.ReadInt32(_mSharedMem))
-                    {
-                        FireOnOutputDebugString(
-                            Marshal.ReadInt32(_mSharedMem),
-                            Marshal.PtrToStringAnsi(pString));
-                    }
+                    _mmfAccessor.Read(0, out int pid);
+                    if (pid != _monitoredPid) // uninteresting process
+                        continue;
+                    _mmfAccessor.ReadArray(sizeof(int), messageBuffer, 0, messageBuffer.Length);
+                    Debug.WriteLine(Encoding.ASCII.GetString(messageBuffer));
+                    OnOutputDebugString?.Invoke(pid, Encoding.ASCII.GetString(messageBuffer));
 
+                    _bufferReadyEvent.Set();
                 }
-            }
-            finally
-            {
-                Dispose();
-            }
+            }).Start();
         }
 
-        private static void FireOnOutputDebugString(int pid, string text)
+        public void Stop()
         {
-#if !DEBUG
-            try
-            {
-#endif
-
-            OnOutputDebugString?.Invoke(pid, text);
-
-#if !DEBUG
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("An 'OnOutputDebugString' handler failed to execute: " + ex.ToString());
-            }
-#endif
+            _wantStop = true;
+            _dataReadyEvent.Set();
         }
 
+        #region IDisposable Support
+        private bool disposedValue = false; // To detect redundant calls
 
-        private static void Dispose()
+        protected virtual void Dispose(bool disposing)
         {
-            if (_mAckEvent != IntPtr.Zero)
-            {
-                if (!CloseHandle(_mAckEvent))
-                {
-                    throw CreateApplicationException("Failed to close handle for 'AckEvent'");
+            if (!disposedValue) {
+                if (disposing) {
+                    Debug.WriteLine("yeet 3");
+                    _mmfAccessor?.Dispose();
+                    _mmf?.Dispose();
+                    _bufferReadyEvent?.Dispose();
+                    _dataReadyEvent?.Dispose();
                 }
 
-                _mAckEvent = IntPtr.Zero;
-            }
-
-            if (_mReadyEvent != IntPtr.Zero)
-            {
-                if (!CloseHandle(_mReadyEvent))
-                {
-                    throw CreateApplicationException("Failed to close handle for 'ReadyEvent'");
-                }
-
-                _mReadyEvent = IntPtr.Zero;
-            }
-
-            if (_mSharedFile != IntPtr.Zero)
-            {
-                if (!CloseHandle(_mSharedFile))
-                {
-                    throw CreateApplicationException("Failed to close handle for 'SharedFile'");
-                }
-
-                _mSharedFile = IntPtr.Zero;
-            }
-
-
-            if (_mSharedMem != IntPtr.Zero)
-            {
-                if (!UnmapViewOfFile(_mSharedMem))
-                {
-                    throw CreateApplicationException("Failed to unmap view for slot 'DBWIN_BUFFER'");
-                }
-
-                _mSharedMem = IntPtr.Zero;
-            }
-
-            if (_mMutex != null)
-            {
-                _mMutex.Close();
-                _mMutex = null;
+                disposedValue = true;
             }
         }
 
-        public static void Stop()
+        // This code was added to correctly implement the disposable pattern.
+        public void Dispose()
         {
-            lock (MSyncRoot)
-            {
-                if (_mCapturer == null)
-                    throw new ObjectDisposedException("DebugMonitor", "This DebugMonitor is not running.");
-                _mCapturer = null;
-                PulseEvent(_mReadyEvent);
-                while (_mAckEvent != IntPtr.Zero)
-                {
-                }
-            }
+            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+            Dispose(true);
         }
-
-        private static ApplicationException CreateApplicationException(string text)
-        {
-            if (string.IsNullOrEmpty(text))
-                throw new ArgumentNullException(nameof(text), "'text' may not be empty or null.");
-
-            return new ApplicationException($"{text}. Last Win32 Error was {Marshal.GetLastWin32Error()}");
-        }
+        #endregion
     }
 }
