@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
+using System.Threading;
+using LiveSplit.Model.Input;
 
 namespace Livesplit.CS3
 {
@@ -15,6 +18,7 @@ namespace Livesplit.CS3
       
         public PointerPath<ushort> BattleId;
         public PointerPath<ushort> BgmId;
+        public LogFileMonitor Monitor { get; private set; }
 
 
         public bool IsHooked => _game != null && !_game.HasExited;
@@ -41,7 +45,9 @@ namespace Livesplit.CS3
             BattleId = new PointerPath<ushort>(_game, 0x00A844E8, 0x5AA24); //This was for 1.02 aka demo it's outdated now
             BgmId = new PointerPath<ushort>(_game, 0x18CB932); //This was for 1.03 it's outdated now
             
-            DebugMonitor.Start(_game.Id);
+            Thread.Sleep(500);
+            Monitor = new LogFileMonitor(Path.Combine(Path.GetTempPath(), "sen3log.txt"));
+            Monitor.Start();;
             _game.Exited += StopMonitor;
 
             
@@ -51,8 +57,8 @@ namespace Livesplit.CS3
         private void StopMonitor(object sender, EventArgs e)
         {
             _game.Exited -= StopMonitor;
-            DebugMonitor.Stop();
-            Debug.WriteLine("Exited the monitor");
+            Monitor.Stop();
+            Monitor.Dispose();
         }
 
         public void UpdateValues()
@@ -65,14 +71,15 @@ namespace Livesplit.CS3
 
         public void Dispose()
         {
-            _game.Exited -= StopMonitor;
             try
             {
-                DebugMonitor.Stop();
+                _game.Exited -= StopMonitor; //god I love duplicate code
+                Monitor.Stop();
+                Monitor.Dispose();
             }
             catch
             {
-                // ignored. Else it just refuses to close sometimes which is not cool
+                // ignored
             }
 
             _game?.Dispose();

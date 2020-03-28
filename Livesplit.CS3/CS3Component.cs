@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using System.Xml;
 using LiveSplit.Model;
@@ -14,8 +16,9 @@ namespace Livesplit.CS3
     {
         private readonly TimerModel _model;
         private readonly PointerAndConsoleManager _manager;
-        
+        private bool _monitorHooked;
         private readonly Settings _settings = new Settings();
+        
         
 
         public string ComponentName { get; }
@@ -36,12 +39,8 @@ namespace Livesplit.CS3
             };
             
             _model.InitializeGameTime();
-            _model.CurrentState.IsGameTimePaused = true;
-            
-            DebugMonitor.OnOutputDebugString -=CheckLoading;
-            DebugMonitor.OnOutputDebugString -=CheckStart;
-            DebugMonitor.OnOutputDebugString +=CheckLoading;
-            DebugMonitor.OnOutputDebugString +=CheckStart;
+            _monitorHooked = false;
+
 
         }
         
@@ -50,41 +49,62 @@ namespace Livesplit.CS3
             _manager.Hook();
             if (!_manager.IsHooked)
             {
+                _monitorHooked = false;
                 return;
             }
-                
+
+            if (!_monitorHooked)
+            {
+                _manager.Monitor.Handlers += CheckStart;
+                _manager.Monitor.Handlers += CheckLoading;
+                Debug.WriteLine("Subscribed events");
+                _monitorHooked = true;
+            }
             _manager.UpdateValues();
             
             CheckBattleSplit();
             
         }
 
-      
 
-        private void CheckStart(int pid, string text)
+        private void CheckStart(string text)
         {
             if (_model.CurrentState.CurrentSplitIndex != -1)
                 return;
             //Rider wanted me to invert the if from == to this so I guess it's more efficient (probably stops at the first char)
-            if (text != "exitField(\"title00\") - start: nextMap(\"f1000\")") return;
-            _model.CurrentState.IsGameTimePaused = true;
+            if (!text.StartsWith("exitField(\"title00\") - start: nextMap(\"f1000\")")) return;
+            //_model.CurrentState.IsGameTimePaused = true;
             _model.Start();
         }
 
-        private void CheckLoading(int pid, string line)
+        private void CheckLoading(string line)
         {
-            
-            if (line == "NOW LOADING Draw Start" && !_model.CurrentState.IsGameTimePaused)
+            if (line.StartsWith("LoadInfo"))
             {
-                System.Diagnostics.Debug.WriteLine("Stopped timer");
+   
+                var match = Regex.Match(line, @"([0-9]*\.?[0-9]+)");
+                if (match.Success)
+                {
+                    double timeToRemove = Convert.ToDouble(match.Groups[1].Value);
+                    if(_model.CurrentState.CurrentTime.GameTime - TimeSpan.FromSeconds(timeToRemove) > TimeSpan.Zero)
+                        _model.CurrentState.SetGameTime(_model.CurrentState.CurrentTime.GameTime - TimeSpan.FromSeconds(timeToRemove));
+                    else _model.CurrentState.SetGameTime(TimeSpan.Zero);
+                }
+            
+
+            }
+            /*if (line.StartsWith("NOW LOADING Draw Start")  && !_model.CurrentState.IsGameTimePaused)
+            {
+                Debug.WriteLine("Stopped timer");
                 _model.CurrentState.IsGameTimePaused = true;
             }
                     
-            else if (line == "NOW LOADING Draw End" && _model.CurrentState.IsGameTimePaused)
+            else if (line.StartsWith("NOW LOADING Draw End") && _model.CurrentState.IsGameTimePaused)
             {
-                System.Diagnostics.Debug.WriteLine(("started timer"));
+                Debug.WriteLine(("started timer"));
                 _model.CurrentState.IsGameTimePaused = false;
             }
+            */
             
         }
         
@@ -128,6 +148,12 @@ namespace Livesplit.CS3
         public void Dispose()
         {
             //remember to unhook if I ever hook anything
+            if (_monitorHooked)
+            {
+                _manager.Monitor.Handlers -= CheckStart;
+                _manager.Monitor.Handlers -= CheckLoading;
+            }
+
             _manager.Dispose();
         }
 
