@@ -1,6 +1,16 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 
 <updates>
+    <update version="0.0.2">
+        <files>
+            <file path="Components/LiveSplit.CS3.dll" status="changed"/>
+        </files>
+        <changelog>
+            <change>
+                Added auto skip functionality
+            </change>
+        </changelog>
+    </update>
     <update version="0.0.1">
         <files>
             <file path="Components/LiveSplit.CS3.dll" status="changed"/>

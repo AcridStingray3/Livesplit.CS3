@@ -47,13 +47,12 @@ namespace Livesplit.CS3
 
             int last = OffsetAddress(targetProcess, ref address, offsets);
             if (address == IntPtr.Zero) { return default(T); }
-
             Type type = typeof(T);
             type = (type.IsEnum ? Enum.GetUnderlyingType(type) : type);
 
             int count = (type == typeof(bool)) ? 1 : Marshal.SizeOf(type);
             byte[] buffer = Read(targetProcess, address + last, count);
-
+            
             object obj = ResolveToType(buffer, type);
             return (T)((object)obj);
         }

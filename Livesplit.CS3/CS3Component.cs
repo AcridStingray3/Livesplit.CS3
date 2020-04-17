@@ -2,8 +2,11 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Threading;
 using System.Windows.Forms;
 using System.Xml;
+using WindowsInput;
+using WindowsInput.Native;
 using LiveSplit.Model;
 using LiveSplit.UI;
 using LiveSplit.UI.Components;
@@ -15,10 +18,12 @@ namespace Livesplit.CS3
     {
         private readonly TimerModel _model;
         private readonly PointerAndConsoleManager _manager;
-        private bool _monitorHooked;
+        private readonly InputSimulator _keyboard;
         private readonly Settings _settings = new Settings();
-        
-        
+        private bool _monitorHooked;
+        private bool _drawStartLoad;
+        private bool _initFieldLoad;
+
 
         public string ComponentName { get; }
 
@@ -39,6 +44,9 @@ namespace Livesplit.CS3
             
             _model.InitializeGameTime();
             _monitorHooked = false;
+            _drawStartLoad = false;
+            _initFieldLoad = false;
+            _keyboard = new InputSimulator();
 
 
         }
@@ -49,6 +57,8 @@ namespace Livesplit.CS3
             if (!_manager.IsHooked)
             {
                 _monitorHooked = false;
+                _drawStartLoad = false;
+                _model.CurrentState.IsGameTimePaused = false;
                 return;
             }
 
@@ -62,7 +72,8 @@ namespace Livesplit.CS3
             _manager.UpdateValues();
             
             CheckBattleSplit();
-            
+            CheckAnimSkip();
+
         }
 
 
@@ -79,18 +90,52 @@ namespace Livesplit.CS3
         private void CheckLoading(string line)
         {
  
-            if (line.StartsWith("NOW LOADING Draw Start")  && !_model.CurrentState.IsGameTimePaused)
+            if (!_model.CurrentState.IsGameTimePaused)
             {
-                Debug.WriteLine("Stopped timer");
-                _model.CurrentState.IsGameTimePaused = true;
-            }
+                if (line.StartsWith("NOW LOADING Draw Start"))
+                {
+                    _model.CurrentState.IsGameTimePaused = true;
+                    _drawStartLoad = true;
+                    Debug.Print("Draw start load start");
+                }
+
+                else if (line.StartsWith("FieldMap::initField start") )
+                {
+                    _model.CurrentState.IsGameTimePaused = true;
+                    _initFieldLoad = true;
                     
-            else if (line.StartsWith("NOW LOADING Draw End") && _model.CurrentState.IsGameTimePaused)
-            {
-                Debug.WriteLine(("started timer"));
-                _model.CurrentState.IsGameTimePaused = false;
+                    Debug.Print("Init field load start");
+                }
+                
+                else if (line.StartsWith("exitField"))
+                {
+                    _model.CurrentState.IsGameTimePaused = true;
+                    
+                    Debug.Print("exit field load start");
+                }
             }
-            
+
+            else
+            {
+                if (!_initFieldLoad && !_drawStartLoad && line.StartsWith("exitField - end"))
+                {
+                    _model.CurrentState.IsGameTimePaused = false;
+                    
+                }
+                
+                else if (!_drawStartLoad && line.StartsWith("FieldMap::initField end"))
+                {
+                    _model.CurrentState.IsGameTimePaused = false;
+                    _initFieldLoad = false;
+                    
+                }
+                
+                else if (line.StartsWith("NOW LOADING Draw End")){
+                    _model.CurrentState.IsGameTimePaused = false;
+                    _drawStartLoad = false;
+                                   
+                }
+            }
             
         }
         
@@ -100,12 +145,20 @@ namespace Livesplit.CS3
             //These are just so rider shuts up about making them private
             ushort a = _manager.BattleId.CurrentValue;
             ushort b = _manager.BattleId.LastValue;
-            a = _manager.BgmId.CurrentValue;
-            b = _manager.BgmId.LastValue;
-            return;
+            
         }
-        
 
+        private void CheckAnimSkip()
+        {
+            
+            if (_manager.Cheating.CurrentValue == 1 && _settings.SkipBattleAnimations)
+            {
+                _keyboard.Keyboard.KeyDown(VirtualKeyCode.SPACE);
+                Thread.Sleep(17);
+                _keyboard.Keyboard.KeyUp(VirtualKeyCode.SPACE);
+                
+            }
+        }
         public Control GetSettingsControl(LayoutMode mode)
         {
             return _settings;
@@ -115,19 +168,19 @@ namespace Livesplit.CS3
         {
             XmlElement xmlSettings = document.CreateElement("Settings");
 
-            XmlElement rndSkins = document.CreateElement(nameof(Settings.RandomizeSkins));
-            rndSkins.InnerText = _settings.RandomizeSkins.ToString();
-            xmlSettings.AppendChild(rndSkins);
+            XmlElement skipBattleAnims = document.CreateElement(nameof(Settings.SkipBattleAnimations));
+            skipBattleAnims.InnerText = _settings.SkipBattleAnimations.ToString();
+            xmlSettings.AppendChild(skipBattleAnims);
 
             return xmlSettings;
         }
 
         public void SetSettings(XmlNode settings)
         {
-            XmlNode rndSkinsNode = settings.SelectSingleNode(".//" + nameof(Settings.RandomizeSkins));
-            if (bool.TryParse(rndSkinsNode?.InnerText, out bool rndSkins))
+            XmlNode skipBattleAnimsNode = settings.SelectSingleNode(".//" + nameof(Settings.SkipBattleAnimations));
+            if (bool.TryParse(skipBattleAnimsNode?.InnerText, out bool skipBattleAnims))
             {
-                _settings.RandomizeSkins = rndSkins;
+                _settings.SkipBattleAnimations = skipBattleAnims;
             }
         }
 

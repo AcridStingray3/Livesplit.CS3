@@ -4,7 +4,22 @@ using System.Text;
 using System.Threading;
 
 namespace Livesplit.CS3
-{
+{ 
+    /*
+ * PollingLogFileMonitor.cs: Aggressively poll a log file to read lines from it
+ * in approximately real time.
+ *
+ * Written in 2020 by xorhash.
+ *
+ * To the extent possible under law,
+ * the author(s) have dedicated all copyright and related and
+ * neighboring rights to this software to the public domain worldwide.
+ * This software is distributed without any warranty. 
+ *
+ * You should have received a copy of the CC0 Public Domain Dedication
+ * along with this software.
+ * If not, see <https://creativecommons.org/publicdomain/zero/1.0/>.
+ */
     public class LogFileMonitor : IDisposable
     {
         private readonly FileStream _stream;
@@ -46,8 +61,10 @@ namespace Livesplit.CS3
                             _stream.Seek(0, SeekOrigin.End);
                             _reader.DiscardBufferedData();
                         } else {
+                            
+                            Thread.Sleep(1);
                             /*
-                             * Sleep 10ms in hopes the file will grow.
+                             * Sleep 1ms in hopes the file will grow.
                              * You may want to adjust this threshold to
                              * something even lower, depending on how little of
                              * an error margin you can allow,

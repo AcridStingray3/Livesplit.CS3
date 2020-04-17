@@ -8,9 +8,7 @@ namespace Livesplit.CS3
     public class PointerPath<T> where T: unmanaged
     {
         private readonly Process _game;
-        private readonly int _baseAddition;
         private readonly int[] _offsets;
-        private IntPtr _address;
         public T LastValue { get; private set; }
         public T CurrentValue { get; private set; }
 
@@ -18,10 +16,9 @@ namespace Livesplit.CS3
          * Should never be called before game is hooked or at least launched
          */
         
-        public PointerPath(Process game, int baseAddition, params int[] offsets)
+        public PointerPath(Process game, params int[] offsets)
         {
             this._game = game;
-            this._baseAddition = baseAddition;
             
             this._offsets = new int[offsets.Length];
             for (int i = 0; i < offsets.Length; ++i)
@@ -29,27 +26,16 @@ namespace Livesplit.CS3
                 this._offsets[i] = offsets[i];
             }
 
-            AttainAddress();
         }
 
        
         public void UpdateAddressValue()
         {
-            
-            AttainAddress();
             this.LastValue = this.CurrentValue;
-            this.CurrentValue = this._game.Read<T>(_address, this._offsets);
+            this.CurrentValue = this._game.Read<T>(_game.MainModule.BaseAddress, this._offsets);
         }
      
-        private void AttainAddress()
-        {
-            if (_game?.MainModule == null)
-                return;
-            
-            this._address = this._game.MainModule.BaseAddress + _baseAddition;
-            _game.OffsetAddress(ref this._address, this._offsets);
 
-        }
     }
     
 }

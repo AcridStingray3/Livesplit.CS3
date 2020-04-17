@@ -14,19 +14,22 @@ namespace Livesplit.CS3
     {
         private DateTime _nextHookAttempt = DateTime.MinValue;
         private Process _game;
+        private bool _disablePointer;
         
       
-        public PointerPath<ushort> BattleId;
-        public PointerPath<ushort> BgmId;
+        public PointerPath<ushort> BattleId { get; private set; }
+        public PointerPath<byte> Cheating { get; private set; }
+        
         public LogFileMonitor Monitor { get; private set; }
 
 
         public bool IsHooked => _game != null && !_game.HasExited;
-        
+
         public void Hook()
         {
             if (IsHooked || DateTime.Now < _nextHookAttempt)
             {
+                _disablePointer = false;
                 return;
             }
 
@@ -40,14 +43,38 @@ namespace Livesplit.CS3
 
             _game = processes[0];
             MemoryReader.Update64Bit(_game);
-            
+
             //Pointer path initializations
-            BattleId = new PointerPath<ushort>(_game, 0x00A844E8, 0x5AA24); //This was for 1.02 aka demo it's outdated now
-            BgmId = new PointerPath<ushort>(_game, 0x18CB932); //This was for 1.03 it's outdated now
+            if (_game.MainModule?.ModuleMemorySize ==  0x01) //TODO placeholder for 1.02
+            {
+
+                BattleId = new PointerPath<ushort>(_game, 0x00A844E8, 0x5AA24); 
+            }
+
+            else if (_game.MainModule?.ModuleMemorySize ==  0x02) //TODO placeholder for 1.03
+            {
+                
+            }
+
+            else if (_game.MainModule?.ModuleMemorySize ==  0x03) //TODO placeholder for 1.04
+            {
+                
+            }
+
+            else if (_game.MainModule?.ModuleMemorySize == 0x1DEA000)
+            {
+                BattleId = new PointerPath<ushort>(_game, 0x016C2648, 0x5A408);
+                Cheating = new PointerPath<byte>(_game, 0x00C53370, 0x8, 0x18, 0x18, 0x1AA8, 0x8, 0x2F98, 0x2C8, 0x2A0);
+            }
+            
+            else
+            {
+                _disablePointer = true;
+            }
             
             Thread.Sleep(500);
             Monitor = new LogFileMonitor(Path.Combine(Path.GetTempPath(), "sen3log.txt"));
-            Monitor.Start();;
+            Monitor.Start();
             _game.Exited += StopMonitor;
 
             
@@ -63,10 +90,12 @@ namespace Livesplit.CS3
 
         public void UpdateValues()
         {
-            
-            //BattleId.UpdateAddressValue();
-            BgmId.UpdateAddressValue();
-            
+            if (!_disablePointer)
+            {
+                BattleId.UpdateAddressValue();
+                Cheating.UpdateAddressValue();
+            }
+
         }
 
         public void Dispose()
