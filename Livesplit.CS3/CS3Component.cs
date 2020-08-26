@@ -10,6 +10,7 @@ using System.Xml;
 using WindowsInput;
 using WindowsInput.Native;
 using LiveSplit.Model;
+using LiveSplit.Options;
 using LiveSplit.UI;
 using LiveSplit.UI.Components;
 // ReSharper disable DelegateSubtraction
@@ -76,7 +77,6 @@ namespace Livesplit.CS3
             if (!_delegatesHooked) 
             {
                 HookDelegates();
-                Debug.WriteLine("Subscribed events");
             }
             
             _manager.UpdateValues();
@@ -90,6 +90,7 @@ namespace Livesplit.CS3
                 return;
             
             if (!text.StartsWith("exitField(\"title00\") - start: nextMap(\"f1000\")")) return;
+            Logger.Log("Starting timer");
             _model.CurrentState.IsGameTimePaused = true;
             _model.Start();
         }
@@ -101,12 +102,16 @@ namespace Livesplit.CS3
             {
                 if (line.StartsWith("NOW LOADING Draw Start"))
                 {
+                    
+                    Logger.Log("Pausing timer! Line was " + line);
                     _model.CurrentState.IsGameTimePaused = true;
                     _drawStartLoad = true;
                 }
 
                 else if (line.StartsWith("FieldMap::initField start") )
                 {
+                    
+                    Logger.Log("Pausing timer! Line was " + line);
                     _model.CurrentState.IsGameTimePaused = true;
                     _initFieldLoad = true;
 
@@ -114,6 +119,8 @@ namespace Livesplit.CS3
                 
                 else if (line.StartsWith("exitField"))
                 {
+                    
+                    Logger.Log("Pausing timer! Line was " + line);
                     _model.CurrentState.IsGameTimePaused = true;
                     
                 }
@@ -123,18 +130,24 @@ namespace Livesplit.CS3
             {
                 if (!_initFieldLoad && !_drawStartLoad && line.StartsWith("exitField - end"))
                 {
+                    
+                    Logger.Log("Unpausing timer! Line was " + line);
                     _model.CurrentState.IsGameTimePaused = false;
                     
                 }
                 
                 else if (!_drawStartLoad && line.StartsWith("FieldMap::initField end"))
                 {
+                    
+                    Logger.Log("Unpausing timer! Line was " + line);
                     _model.CurrentState.IsGameTimePaused = false;
                     _initFieldLoad = false;
                     
                 }
                 
                 else if (line.StartsWith("NOW LOADING Draw End")){
+                    
+                    Logger.Log("Unpausing timer! Line was " + line);
                     _model.CurrentState.IsGameTimePaused = false;
                     _drawStartLoad = false;
                                    
@@ -144,23 +157,31 @@ namespace Livesplit.CS3
         
         private void CheckBattleSplit(BattleEnums endedBattle)
         {
-            try {            
-                if( (bool)typeof(Settings).GetField( endedBattle.ToString()).GetValue(_settings) )
-                    _model.Split(); 
+            try
+            {
+                if (!(bool) typeof(Settings).GetField(endedBattle.ToString()).GetValue(_settings)) return;
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                Logger.Log(e.ToString());
             }
+
+            Logger.Log("Running a split with enum " + endedBattle);
+                _model.Split();
+
             
         }
 
         private void SkipBattleAnimation()
         {
-            Thread.Sleep(70);
+            Logger.Log("Skipping battle animation");
+            _keyboard.Keyboard.KeyPress(VirtualKeyCode.SPACE);
+            
+            /*
             _keyboard.Keyboard.KeyDown(VirtualKeyCode.SPACE);
             Thread.Sleep(1000/60);
             _keyboard.Keyboard.KeyUp(VirtualKeyCode.SPACE);
+            */
         }
         
         
@@ -213,30 +234,52 @@ namespace Livesplit.CS3
 
         private void HookDelegates()
         {
+            Logger.Log("Subscribing events...");
             if(_delegatesHooked)
                 return;
             
             _manager.Monitor.Handlers += CheckStart;
-            _manager.Monitor.Handlers += CheckLoading;
-            _manager.OnBattleEnd += CheckBattleSplit;
-            if (_settings.SkipBattleAnimations)
-                _manager.OnBattleAnimationStart += SkipBattleAnimation;
+            Logger.Log("LogFileMonitor hooked to Start!");
             
+            _manager.Monitor.Handlers += CheckLoading;
+            Logger.Log("LogFileMonitor hooked to Loading!");
+            
+            _manager.OnBattleEnd += CheckBattleSplit;
+            Logger.Log("OnBattleEnd hooked to BattleSplit!");
+            
+            if (_settings.SkipBattleAnimations)
+            {
+                _manager.OnBattleAnimationStart += SkipBattleAnimation;
+                Logger.Log("OnBattleAnimationStart hooked to SkipBattleAnimation!");
+            }
             _delegatesHooked = true;
+            
+            Logger.Log("Events subscribed!");
         }
         
         private void UnhookDelegates()
         {
             if(!_delegatesHooked)
                 return;
-            _manager.OnBattleEnd -= CheckBattleSplit;
             
+            Logger.Log("Unsubscribing events...");
+            
+            _manager.OnBattleEnd -= CheckBattleSplit;
+            Logger.Log("OnBattleEnd unhooked from BattleSplit!");
+
             if (_settings.SkipBattleAnimations)
+            {
                 _manager.OnBattleAnimationStart -= SkipBattleAnimation;
+                Logger.Log("OnBattleAnimationStart unhooked from SkipBattleAnimation!");
+            }
+
             if (_manager.Monitor.Handlers != null)
             {
                 _manager.Monitor.Handlers -= CheckStart;
+                Logger.Log("LogFileMonitor unhooked from Start!");
+            
                 _manager.Monitor.Handlers -= CheckLoading;
+                Logger.Log("LogFileMonitor unhooked from Loading!");
             }
 
 

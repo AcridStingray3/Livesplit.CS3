@@ -11,6 +11,10 @@ namespace Livesplit.CS3
     
     public class PointerAndConsoleManager : IDisposable
     {
+
+        private const string PROCESS_NAME = "ed8_3_PC";
+        
+        
         private DateTime _nextHookAttempt = DateTime.MinValue;
         private Process _game;
         private bool _disablePointer;
@@ -38,7 +42,7 @@ namespace Livesplit.CS3
 
             _nextHookAttempt = DateTime.Now.AddSeconds(1);
             
-            Process[] processes = Process.GetProcessesByName("ed8_3_PC");
+            Process[] processes = Process.GetProcessesByName(PROCESS_NAME);
             if (processes.Length == 0)
             {
                 return;
@@ -51,12 +55,18 @@ namespace Livesplit.CS3
             {
                 //Pointer path initializations
                 //TODO placeholder for 1.02
-                case 0x01: _battleID = new PointerPath<ushort>(_game, new []{0x00A844E8, 0x5AA24});
+                case 0x01: 
+                    _battleID = new PointerPath<ushort>(_game, new []{0x00A844E8, 0x5AA24});
+                    _disablePointer = true;
                     break;
                 //TODO placeholder for 1.03
-                case 0x02: break;
+                case 0x02:
+                    _disablePointer = true;
+                    break;
                 //TODO placeholder for 1.04
-                case 0x03: break;
+                case 0x03:
+                    _disablePointer = true;
+                    break;
                 // 1.05
                 case 0x1DEA000:
                     _battleID = new PointerPath<ushort>(_game, new []{0x016C2648, 0x5A408});
@@ -94,11 +104,11 @@ namespace Livesplit.CS3
             
             if (!Enum.IsDefined(typeof(BattleEnums), oldID))
             {
-                Debug.Print($"The battle ID value {oldID} isn't defined!");
+                Logger.Log($"The battle ID value {oldID} isn't defined!");
                 return;
             }
 
-            Debug.Print("Firing the Battle End Delegate");
+            Logger.Log($"Firing the Battle End Delegate! Enum is {(BattleEnums)oldID}");
             OnBattleEnd.Invoke((BattleEnums)oldID);
             
         }
@@ -107,7 +117,8 @@ namespace Livesplit.CS3
         {
             if(currentvalue != 1 || lastvalue != 0) return;
             
-            Debug.Print("Firing the Animation Start Delegate");
+            Thread.Sleep(70);
+            Logger.Log("Firing the Animation Start Delegate!");
             OnBattleAnimationStart.Invoke();
         }
 
@@ -120,12 +131,15 @@ namespace Livesplit.CS3
         {
             try
             {
+                
                 if (!_disablePointer)
                 {
+                    // ReSharper disable DelegateSubtraction
                     _battleID.OnPointerChange -= CheckBattleSplit;
                     _cheating.OnPointerChange -= CheckSkipAnimation;
+                    // ReSharper restore DelegateSubtraction
                 }
-
+                
                 _game.Exited -= OnGameExit;
                 Monitor.Stop();
                 Monitor.Dispose();

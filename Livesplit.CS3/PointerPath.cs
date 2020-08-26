@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Livesplit.CS3
@@ -47,7 +46,7 @@ namespace Livesplit.CS3
         {
             _lastValue = _currentValue;
             
-            if (_address == default || !fixateOnAddress)
+            if (!fixateOnAddress || _address == default)
                 FollowPath();
             else
                 ReadFromAddressDirectly();
@@ -69,7 +68,6 @@ namespace Livesplit.CS3
         
         private void ReadFromAddressDirectly()
         {
-            Debug.Print($"Reading straight from an address! Address is {_address.ToString("X")}");
             _currentValue = _game.ReadFromAddress<T>(_address);
         }
 
