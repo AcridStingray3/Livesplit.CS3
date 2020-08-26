@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 using System.Xml;
@@ -10,6 +12,9 @@ using WindowsInput.Native;
 using LiveSplit.Model;
 using LiveSplit.UI;
 using LiveSplit.UI.Components;
+// ReSharper disable DelegateSubtraction
+
+//TODO cache settings onto a map to not reflect over them every time a battle split triggers, since Yusuf will yell at me that's slow
 
 
 namespace Livesplit.CS3
@@ -20,12 +25,15 @@ namespace Livesplit.CS3
         private readonly PointerAndConsoleManager _manager;
         private readonly InputSimulator _keyboard;
         private readonly Settings _settings = new Settings();
-        private bool _monitorHooked;
+        
+        private bool _delegatesHooked; 
+        
+        // These two are related so you could make them a struct if you reeeeeeeeeeeeally wanted to but like it's 2 bools dude
         private bool _drawStartLoad;
         private bool _initFieldLoad;
-
-
+        
         public string ComponentName { get; }
+        
 
         public CS3Component(LiveSplitState state, string name)
         {
@@ -43,7 +51,7 @@ namespace Livesplit.CS3
             };
             
             _model.InitializeGameTime();
-            _monitorHooked = false;
+            _delegatesHooked = false;
             _drawStartLoad = false;
             _initFieldLoad = false;
             _keyboard = new InputSimulator();
@@ -56,23 +64,22 @@ namespace Livesplit.CS3
             _manager.Hook();
             if (!_manager.IsHooked)
             {
-                _monitorHooked = false;
-                _drawStartLoad = false;
-                _model.CurrentState.IsGameTimePaused = false;
+                _drawStartLoad = true;
+                _initFieldLoad = false;
+                _model.CurrentState.IsGameTimePaused = true;
+                
+                UnhookDelegates();
+                
                 return;
             }
 
-            if (!_monitorHooked)
+            if (!_delegatesHooked) 
             {
-                _manager.Monitor.Handlers += CheckStart;
-                _manager.Monitor.Handlers += CheckLoading;
+                HookDelegates();
                 Debug.WriteLine("Subscribed events");
-                _monitorHooked = true;
             }
-            _manager.UpdateValues();
             
-            CheckBattleSplit();
-            CheckAnimSkip();
+            _manager.UpdateValues();
 
         }
 
@@ -81,7 +88,7 @@ namespace Livesplit.CS3
         {
             if (_model.CurrentState.CurrentSplitIndex != -1)
                 return;
-            //Rider wanted me to invert the if from == to this so I guess it's more efficient (probably stops at the first char)
+            
             if (!text.StartsWith("exitField(\"title00\") - start: nextMap(\"f1000\")")) return;
             _model.CurrentState.IsGameTimePaused = true;
             _model.Start();
@@ -96,22 +103,19 @@ namespace Livesplit.CS3
                 {
                     _model.CurrentState.IsGameTimePaused = true;
                     _drawStartLoad = true;
-                    Debug.Print("Draw start load start");
                 }
 
                 else if (line.StartsWith("FieldMap::initField start") )
                 {
                     _model.CurrentState.IsGameTimePaused = true;
                     _initFieldLoad = true;
-                    
-                    Debug.Print("Init field load start");
+
                 }
                 
                 else if (line.StartsWith("exitField"))
                 {
                     _model.CurrentState.IsGameTimePaused = true;
                     
-                    Debug.Print("exit field load start");
                 }
             }
 
@@ -136,29 +140,30 @@ namespace Livesplit.CS3
                                    
                 }
             }
-            
         }
         
-        //TODO
-        private void CheckBattleSplit()
+        private void CheckBattleSplit(BattleEnums endedBattle)
         {
-            //These are just so rider shuts up about making them private
-            ushort a = _manager.BattleId.CurrentValue;
-            ushort b = _manager.BattleId.LastValue;
+            try {            
+                if( (bool)typeof(Settings).GetField( endedBattle.ToString()).GetValue(_settings) )
+                    _model.Split(); 
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
             
         }
 
-        private void CheckAnimSkip()
+        private void SkipBattleAnimation()
         {
-            
-            if (_manager.Cheating.CurrentValue == 1 && _settings.SkipBattleAnimations)
-            {
-                _keyboard.Keyboard.KeyDown(VirtualKeyCode.SPACE);
-                Thread.Sleep(17);
-                _keyboard.Keyboard.KeyUp(VirtualKeyCode.SPACE);
-                
-            }
+            Thread.Sleep(20);
+            _keyboard.Keyboard.KeyDown(VirtualKeyCode.SPACE);
+            Thread.Sleep(1000/60);
+            _keyboard.Keyboard.KeyUp(VirtualKeyCode.SPACE);
         }
+        
+        
         public Control GetSettingsControl(LayoutMode mode)
         {
             return _settings;
@@ -166,11 +171,22 @@ namespace Livesplit.CS3
 
         public XmlNode GetSettings(XmlDocument document)
         {
+            // This runs in a fucking loop apparently so Reflection over it is awful but like typing all the settings out is awful too dude
+            
             XmlElement xmlSettings = document.CreateElement("Settings");
 
+            foreach (FieldInfo setting in typeof(Settings).GetFields().Where(field => field.FieldType == typeof(bool)))
+            {
+                XmlElement element = document.CreateElement(setting.Name);
+                element.InnerText = ((bool)setting.GetValue(_settings)).ToString();
+                xmlSettings.AppendChild(element);
+            }
+            
+            /*////
             XmlElement skipBattleAnims = document.CreateElement(nameof(Settings.SkipBattleAnimations));
             skipBattleAnims.InnerText = _settings.SkipBattleAnimations.ToString();
             xmlSettings.AppendChild(skipBattleAnims);
+            */
 
             return xmlSettings;
         }
@@ -182,20 +198,54 @@ namespace Livesplit.CS3
             {
                 _settings.SkipBattleAnimations = skipBattleAnims;
             }
+            
         }
 
         public void Dispose()
         {
             //remember to unhook if I ever hook anything
-            if (_monitorHooked)
+      
+            UnhookDelegates();
+            _manager.Dispose();
+        }
+
+        #region UtilityMethods
+
+        private void HookDelegates()
+        {
+            if(_delegatesHooked)
+                return;
+            
+            _manager.Monitor.Handlers += CheckStart;
+            _manager.Monitor.Handlers += CheckLoading;
+            _manager.OnBattleEnd += CheckBattleSplit;
+            if (_settings.SkipBattleAnimations)
+                _manager.OnBattleAnimationStart += SkipBattleAnimation;
+            
+            _delegatesHooked = true;
+        }
+        
+        private void UnhookDelegates()
+        {
+            if(!_delegatesHooked)
+                return;
+            _manager.OnBattleEnd -= CheckBattleSplit;
+            
+            if (_settings.SkipBattleAnimations)
+                _manager.OnBattleAnimationStart -= SkipBattleAnimation;
+            if (_manager.Monitor.Handlers != null)
             {
                 _manager.Monitor.Handlers -= CheckStart;
                 _manager.Monitor.Handlers -= CheckLoading;
             }
 
-            _manager.Dispose();
+
+            _delegatesHooked = false;
+
         }
 
+        #endregion
+        
         #region Unused interface stuff
         
         public void DrawHorizontal(Graphics g, LiveSplitState state, float height, Region clipRegion)
@@ -208,14 +258,14 @@ namespace Livesplit.CS3
             
         }
 
-        public float HorizontalWidth => 0;
-        public float MinimumHeight => 0;
-        public float VerticalHeight => 0;
-        public float MinimumWidth => 0;
-        public float PaddingTop => 0;
-        public float PaddingBottom => 0;
-        public float PaddingLeft => 0;
-        public float PaddingRight => 0;
+        public float                       HorizontalWidth     => 0;
+        public float                       MinimumHeight       => 0;
+        public float                       VerticalHeight      => 0;
+        public float                       MinimumWidth        => 0;
+        public float                       PaddingTop          => 0;
+        public float                       PaddingBottom       => 0;
+        public float                       PaddingLeft         => 0;
+        public float                       PaddingRight        => 0;
         public IDictionary<string, Action> ContextMenuControls => null;
         #endregion
     }

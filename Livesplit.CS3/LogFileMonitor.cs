@@ -4,8 +4,9 @@ using System.Text;
 using System.Threading;
 
 namespace Livesplit.CS3
-{ 
-    /*
+{
+    
+/*
  * PollingLogFileMonitor.cs: Aggressively poll a log file to read lines from it
  * in approximately real time.
  *
@@ -20,7 +21,7 @@ namespace Livesplit.CS3
  * along with this software.
  * If not, see <https://creativecommons.org/publicdomain/zero/1.0/>.
  */
-    public class LogFileMonitor : IDisposable
+    public sealed class LogFileMonitor : IDisposable
     {
         private readonly FileStream _stream;
         private readonly StreamReader _reader;
@@ -46,10 +47,9 @@ namespace Livesplit.CS3
         public void Start()
         {
             new Thread(() => {
-                string line;
-
-                while (!_wantStop) {
-                    line = _reader.ReadLine();
+                while (!_wantStop)
+                {
+                    string line = _reader.ReadLine();
                     if (line == null) {
                         /*
                          * Check if truncation occurred and rebase the reader
@@ -85,20 +85,18 @@ namespace Livesplit.CS3
 
         public void Stop()
         {
-            this._wantStop = true;
+            _wantStop = true;
         }
 
         #region IDisposable Support
-        private bool disposedValue = false; // To detect redundant calls
+        private bool disposedValue; // To detect redundant calls
 
-        protected virtual void Dispose(bool disposing)
+        private void Dispose(bool disposing)
         {
             if (!disposedValue) {
                 if (disposing) {
-                    if (_reader != null)
-                        _reader.Dispose();
-                    if (_stream != null)
-                        _stream.Dispose();
+                    _reader?.Dispose();
+                    _stream?.Dispose();
                 }
                 disposedValue = true;
             }

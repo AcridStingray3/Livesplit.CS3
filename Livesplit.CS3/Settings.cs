@@ -5,7 +5,7 @@ namespace Livesplit.CS3
 {
     public partial class Settings : UserControl
     {
-        public bool SkipBattleAnimations { get; set; } = true;
+        public bool SkipBattleAnimations = true;
  
         public Settings()
         {
@@ -16,9 +16,14 @@ namespace Livesplit.CS3
             Load += LoadLayout;
         }
  
-        private void LoadLayout(object sender, System.EventArgs e)
+        private void LoadLayout(object sender, EventArgs e)
         {
             skipButtonBox.Checked = SkipBattleAnimations;
+        }
+
+        private void battleIDSplitsCollection_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            throw new System.NotImplementedException();
         }
     }
 }

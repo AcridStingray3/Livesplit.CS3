@@ -37,9 +37,9 @@ namespace Livesplit.CS3
             // 
             // skipButtonBox
             // 
-            this.skipButtonBox.Location = new System.Drawing.Point(17, 24);
+            this.skipButtonBox.Location = new System.Drawing.Point(15, 21);
             this.skipButtonBox.Name = "skipButtonBox";
-            this.skipButtonBox.Size = new System.Drawing.Size(238, 24);
+            this.skipButtonBox.Size = new System.Drawing.Size(204, 21);
             this.skipButtonBox.TabIndex = 0;
             this.skipButtonBox.Text = "Automatically skip battle animations";
             this.skipButtonBox.UseVisualStyleBackColor = true;
@@ -48,25 +48,26 @@ namespace Livesplit.CS3
             // 
             this.battleIDSplitsCollection.FormattingEnabled = true;
             this.battleIDSplitsCollection.Items.AddRange(new object[] {"Split a", "Split b ", "Split c", "Split d"});
-            this.battleIDSplitsCollection.Location = new System.Drawing.Point(17, 117);
+            this.battleIDSplitsCollection.Location = new System.Drawing.Point(15, 101);
             this.battleIDSplitsCollection.Name = "battleIDSplitsCollection";
-            this.battleIDSplitsCollection.Size = new System.Drawing.Size(413, 382);
+            this.battleIDSplitsCollection.Size = new System.Drawing.Size(355, 319);
             this.battleIDSplitsCollection.TabIndex = 1;
+            this.battleIDSplitsCollection.SelectedIndexChanged += new System.EventHandler(this.battleIDSplitsCollection_SelectedIndexChanged);
             // 
-            // background
+            // Settings
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.Controls.Add(this.battleIDSplitsCollection);
             this.Controls.Add(this.skipButtonBox);
-            this.Name = "background";
-            this.Size = new System.Drawing.Size(465, 665);
+            this.Name = "Settings";
+            this.Size = new System.Drawing.Size(399, 576);
             this.ResumeLayout(false);
         }
 
-        #endregion
-
-        private System.Windows.Forms.CheckBox skipButtonBox;
         private System.Windows.Forms.CheckedListBox battleIDSplitsCollection;
+        private System.Windows.Forms.CheckBox skipButtonBox;
+
+        #endregion
     }
 }
