@@ -56,14 +56,20 @@ namespace Livesplit.CS3
             object obj = ResolveToType(buffer, type);
             return (T)((object)obj);
         }
-        public static T ReadFromBase<T>(this Process targetProcess, int baseAddition, params int[] offsets) where T : struct
+
+        public static IntPtr ResolveAddress(this Process targetProcess, IntPtr baseAddress, params int[] offsets)
         {
-            
-            if (targetProcess == null || targetProcess.MainModule == null) { return default(T); }
+            IntPtr address = baseAddress;
+            int last = OffsetAddress(targetProcess, ref address, offsets);
+            return address + last;
+        }
 
-            IntPtr address = targetProcess.MainModule.BaseAddress + baseAddition;
+        public static T ReadFromAddress<T>(this Process targetProcess, IntPtr address)
+        {
+            int count = (typeof(T) == typeof(bool)) ? 1 : Marshal.SizeOf(typeof(T));
+            byte[] buffer = Read(targetProcess, address, count);
 
-            return Read<T>(targetProcess, address, offsets);
+            return (T) ResolveToType(buffer, typeof(T));
         }
         private static object ResolveToType(byte[] bytes, Type type)
         {

@@ -51,7 +51,7 @@ namespace Livesplit.CS3
             {
                 //Pointer path initializations
                 //TODO placeholder for 1.02
-                case 0x01: _battleID = new PointerPath<ushort>(_game, 0x00A844E8, 0x5AA24);
+                case 0x01: _battleID = new PointerPath<ushort>(_game, new []{0x00A844E8, 0x5AA24});
                     break;
                 //TODO placeholder for 1.03
                 case 0x02: break;
@@ -59,8 +59,8 @@ namespace Livesplit.CS3
                 case 0x03: break;
                 // 1.05
                 case 0x1DEA000:
-                    _battleID = new PointerPath<ushort>(_game, 0x016C2648, 0x5A408);
-                    _cheating = new PointerPath<byte>(_game, 0x00A1C6C0, 0x40, 0x150, 0x28, 0x70, 0x850, 0x78, 0x10, 0x40, 0x4B38, 0x2F98, 0x2C8, 0x2A0);
+                    _battleID = new PointerPath<ushort>(_game, new []{0x016C2648, 0x5A408});
+                    _cheating = new PointerPath<byte>(_game, new []{0x00A1C6C0, 0x40, 0x150, 0x28, 0x70, 0x850, 0x78, 0x10, 0x40, 0x4B38, 0x2F98, 0x2C8, 0x2A0}, 0, 1);
                     break;
                 default: _disablePointer = true;
                     break;

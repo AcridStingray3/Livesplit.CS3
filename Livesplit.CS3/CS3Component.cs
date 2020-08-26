@@ -157,7 +157,7 @@ namespace Livesplit.CS3
 
         private void SkipBattleAnimation()
         {
-            Thread.Sleep(20);
+            Thread.Sleep(70);
             _keyboard.Keyboard.KeyDown(VirtualKeyCode.SPACE);
             Thread.Sleep(1000/60);
             _keyboard.Keyboard.KeyUp(VirtualKeyCode.SPACE);

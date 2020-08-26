@@ -1,45 +1,78 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Livesplit.CS3
 {
     // Reads from memory using a pointer path with the game's address as a starting point to the offsets
-    // Changes to the values are easily detected due to the buffer system of Last and Current values. 
-    public class PointerPath<T> where T: unmanaged
+    // Changes to the values are easily detected due to the buffer system of Last and Current values.
+    
+    // Also able to fixate on an address, instead of following a path every time, which is highly discouraged
+    // but proved to be a needed hack for some games such as ToCS3 where the address didn't move around but there was no constant path to it
+    public class PointerPath<T> where T: struct
     {
         private readonly Process _game;
         private readonly int[] _offsets;
         private T _lastValue;
         private T _currentValue;
-        
+
+        private readonly bool fixateOnAddress;
+        private readonly T _lastValueCondition;
+        private readonly T _currentValueCondition;
+        private IntPtr _address;
+       
         public delegate void OnPointerChangeHandler(T lastValue, T currentValue);
         public OnPointerChangeHandler OnPointerChange;
 
         /**
          * Should never be called before game is hooked or at least launched
          */
-        
-        public PointerPath(Process game, params int[] offsets)
+
+        public PointerPath(Process game, int[] offsets, T lastValueCondition = default, T currentValueCondition = default)
         {
             _game = game;
+            _offsets = offsets;
+
+            if (lastValueCondition.Equals(default(T)) && currentValueCondition.Equals(default(T)))
+                return;
             
-            _offsets = new int[offsets.Length];
-            for (int i = 0; i < offsets.Length; ++i)
-            {
-                _offsets[i] = offsets[i];
-            }
+            fixateOnAddress = true;
+            _lastValueCondition = lastValueCondition;
+            _currentValueCondition = currentValueCondition;
 
         }
 
-       
         // Updates the values and fires the hook if they have changed
         public void UpdateAddressValue()
         {
             _lastValue = _currentValue;
-            _currentValue = _game.Read<T>(_game.MainModule.BaseAddress, _offsets);
+            
+            if (_address == default || !fixateOnAddress)
+                FollowPath();
+            else
+                ReadFromAddressDirectly();
             
             if(!_lastValue.Equals(_currentValue))
-                OnPointerChange?.Invoke(_lastValue, _currentValue);
+                OnPointerChange.Invoke(_lastValue, _currentValue);
         }
+        
+        private void FollowPath()
+        {
+            _currentValue = _game.Read<T>(_game.MainModule.BaseAddress, _offsets);
+            if(!_lastValue.Equals(_lastValueCondition) || !_currentValue.Equals(_currentValueCondition))
+                return;
+            
+            // Hardset the address if needed
+            _address = _game.ResolveAddress(_game.MainModule.BaseAddress, _offsets);
+
+        }
+        
+        private void ReadFromAddressDirectly()
+        {
+            Debug.Print($"Reading straight from an address! Address is {_address.ToString("X")}");
+            _currentValue = _game.ReadFromAddress<T>(_address);
+        }
+
      
 
     }
