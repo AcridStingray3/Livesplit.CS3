@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Reflection;
@@ -10,12 +9,9 @@ using System.Xml;
 using WindowsInput;
 using WindowsInput.Native;
 using LiveSplit.Model;
-using LiveSplit.Options;
 using LiveSplit.UI;
 using LiveSplit.UI.Components;
 // ReSharper disable DelegateSubtraction
-
-//TODO cache settings onto a map to not reflect over them every time a battle split triggers, since Yusuf will yell at me that's slow
 
 
 namespace Livesplit.CS3
@@ -34,7 +30,8 @@ namespace Livesplit.CS3
         private bool _initFieldLoad;
         
         public string ComponentName { get; }
-        
+
+        private readonly Dictionary<BattleEnums, FieldInfo> _battleSplitFieldInfos;
 
         public CS3Component(LiveSplitState state, string name)
         {
@@ -56,6 +53,20 @@ namespace Livesplit.CS3
             _drawStartLoad = false;
             _initFieldLoad = false;
             _keyboard = new InputSimulator();
+            _battleSplitFieldInfos = new Dictionary<BattleEnums, FieldInfo>();
+            foreach (BattleEnums enums in Enum.GetValues(typeof(BattleEnums))) // Cache the FieldInfos for lesser reflection usage
+            {
+                try
+                {
+                    _battleSplitFieldInfos.Add(enums, typeof(Settings).GetField(enums.ToString()));
+                }
+                catch (Exception e)
+                {
+                    Logger.Log(e.ToString());
+                    // Ignored
+                }
+                
+            }
 
 
         }
@@ -157,17 +168,12 @@ namespace Livesplit.CS3
         
         private void CheckBattleSplit(BattleEnums endedBattle)
         {
-            try
-            {
-                if (!(bool) typeof(Settings).GetField(endedBattle.ToString()).GetValue(_settings)) return;
-            }
-            catch (Exception e)
-            {
-                Logger.Log(e.ToString());
-            }
+            
+
+            if (!(_battleSplitFieldInfos[endedBattle]?.GetValue(_settings) as bool? ?? false)) return; // If the setting is false, or it doesn't exist, return
 
             Logger.Log("Running a split with enum " + endedBattle);
-                _model.Split();
+            _model.Split();
 
             
         }
@@ -175,13 +181,9 @@ namespace Livesplit.CS3
         private void SkipBattleAnimation()
         {
             Logger.Log("Skipping battle animation");
-            _keyboard.Keyboard.KeyPress(VirtualKeyCode.SPACE);
-            
-            /*
             _keyboard.Keyboard.KeyDown(VirtualKeyCode.SPACE);
-            Thread.Sleep(1000/60);
+            Thread.Sleep(17);
             _keyboard.Keyboard.KeyUp(VirtualKeyCode.SPACE);
-            */
         }
         
         
@@ -192,11 +194,14 @@ namespace Livesplit.CS3
 
         public XmlNode GetSettings(XmlDocument document)
         {
+            // XmlSerializer serializer = new XmlSerializer(typeof(Settings)); XMLSerializer breaks lol 
+            
             // This runs in a fucking loop apparently so Reflection over it is awful but like typing all the settings out is awful too dude
             
             XmlElement xmlSettings = document.CreateElement("Settings");
 
-            foreach (FieldInfo setting in typeof(Settings).GetFields().Where(field => field.FieldType == typeof(bool)))
+            // serializer.Serialize(TextWriter.Null, _settings);
+            foreach (FieldInfo setting in _battleSplitFieldInfos.Values.Where(field => field.FieldType == typeof(bool)))
             {
                 XmlElement element = document.CreateElement(setting.Name);
                 element.InnerText = ((bool)setting.GetValue(_settings)).ToString();

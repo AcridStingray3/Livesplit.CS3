@@ -12,7 +12,7 @@ namespace Livesplit.CS3
     
     public static class Logger
     {
-        private const string FILE_NAME = "****ToCS3_Livesplit_Log";
+        private const string FILE_NAME = "ToCS3_Livesplit_Log";
         private static readonly StreamWriter Writer;
 
         static Logger()
@@ -32,7 +32,7 @@ namespace Livesplit.CS3
         
         public static void Log(string message)
         {
-            Writer.Write(message);
+            Writer.Write($"[{DateTime.Now}] {message} {'\n'}");
         }
         
     }
