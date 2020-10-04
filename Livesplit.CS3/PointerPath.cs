@@ -13,12 +13,15 @@ namespace Livesplit.CS3
         private readonly Process _game;
         private readonly int[] _offsets;
         private T _lastValue;
+
         private T _currentValue;
 
         private readonly bool fixateOnAddress;
         private readonly T _lastValueCondition;
         private readonly T _currentValueCondition;
         private IntPtr _address;
+
+        private readonly bool _continuouslyFire;
        
         public delegate void OnPointerChangeHandler(T lastValue, T currentValue);
         public OnPointerChangeHandler OnPointerChange;
@@ -27,10 +30,11 @@ namespace Livesplit.CS3
          * Should never be called before game is hooked or at least launched
          */
 
-        public PointerPath(Process game, int[] offsets, T lastValueCondition = default, T currentValueCondition = default)
+        public PointerPath(Process game, int[] offsets, T lastValueCondition = default, T currentValueCondition = default , bool continuouslyFire = false)
         {
             _game = game;
             _offsets = offsets;
+            _continuouslyFire = continuouslyFire;
 
             if (lastValueCondition.Equals(default(T)) && currentValueCondition.Equals(default(T)))
                 return;
@@ -51,7 +55,7 @@ namespace Livesplit.CS3
             else
                 ReadFromAddressDirectly();
             
-            if(!_lastValue.Equals(_currentValue))
+            if(!_lastValue.Equals(_currentValue) || _continuouslyFire)
                 OnPointerChange.Invoke(_lastValue, _currentValue);
         }
         
