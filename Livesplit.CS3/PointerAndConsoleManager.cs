@@ -13,8 +13,9 @@ namespace Livesplit.CS3
     {
 
         private const string PROCESS_NAME = "ed8_3_PC";
-        
-        
+        private const string LOG_FILE_NAME = "sen3log.txt";
+
+
         private DateTime _nextHookAttempt = DateTime.MinValue;
         private Process _game;
         private bool _disablePointer;
@@ -29,16 +30,18 @@ namespace Livesplit.CS3
         
         public LogFileMonitor Monitor { get; private set; } // Honestly really tempted to make a dummy hook that is literally just a passthrough, so as to not have to access a.b.c. Ugly dependency
         
-        public bool IsHooked => _game != null && !_game.HasExited;
+        public bool IsHooked => _game != null && IsAlive(_game);
         
 
         public void Hook() // This is honestly just a constructor I hate this design where the constructor is not a real constructor dude. 5 months ago me is an idiot
         {
             if (IsHooked || DateTime.Now < _nextHookAttempt)
             {
-                _disablePointer = false;
                 return;
             }
+
+            if (!IsHooked)
+                _disablePointer = false;
 
             _nextHookAttempt = DateTime.Now.AddSeconds(1);
             
@@ -70,14 +73,14 @@ namespace Livesplit.CS3
                 // 1.05
                 case 0x1DEA000:
                     _battleID = new PointerPath<ushort>(_game, new []{0x016C2648, 0x5A408});
-                    _cheating = new PointerPath<byte>(_game, new []{0x00A1C6C0, 0x40, 0x150, 0x28, 0x70, 0x850, 0x78, 0x10, 0x40, 0x4B38, 0x2F98, 0x2C8, 0x2A0}, 0, 1);
+                    _cheating = new PointerPath<byte>(_game, new []{0x00C53210, 0x8, 0x28, 0x1AA8,0x8, 0x2F98, 0x290, 0x278, 0x278, 0x2C8, 0x2A0}, 0, 1, true);
                     break;
                 default: _disablePointer = true;
                     break;
             }
             
             Thread.Sleep(500);
-            Monitor = new LogFileMonitor(Path.Combine(Path.GetTempPath(), "sen3log.txt"));
+            Monitor = new LogFileMonitor(Path.Combine(Path.GetTempPath(), LOG_FILE_NAME));
             Monitor.Start();
             _game.Exited += OnGameExit;
             if(_disablePointer)
@@ -115,11 +118,11 @@ namespace Livesplit.CS3
         
         private void CheckSkipAnimation(byte lastvalue, byte currentvalue)
         {
-            if(currentvalue != 1 || lastvalue != 0) return;
+            if(currentvalue != 1) return;
             
-            Thread.Sleep(70);
             Logger.Log("Firing the Animation Start Delegate!");
-            OnBattleAnimationStart.Invoke();
+            OnBattleAnimationStart.Invoke();   
+            
         }
 
         private void OnGameExit(object sender, EventArgs e)
@@ -152,6 +155,22 @@ namespace Livesplit.CS3
             _game?.Dispose();
 
         }
+
+        private static bool IsAlive(Process game)
+        {
+            try
+            {
+                Process.GetProcessById(game.Id);
+
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+
+            return true;
+        }
+        
 
 
     }
