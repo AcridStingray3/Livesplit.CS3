@@ -1,6 +1,8 @@
 ﻿﻿using System.ComponentModel;
+ using System.Linq;
+ using System.Windows.Forms;
 
-namespace Livesplit.CS3
+ namespace Livesplit.CS3
 {
     partial class Settings
     {
@@ -47,12 +49,14 @@ namespace Livesplit.CS3
             // battleIDSplitsCollection
             // 
             this.battleIDSplitsCollection.FormattingEnabled = true;
-            this.battleIDSplitsCollection.Items.AddRange(new object[] {"Split a", "Split b ", "Split c", "Split d"});
+            this.battleIDSplitsCollection.Items.AddRange(displayedSettings.Keys.Select(x => x.Replace("_", " ")).ToArray());
             this.battleIDSplitsCollection.Location = new System.Drawing.Point(15, 101);
             this.battleIDSplitsCollection.Name = "battleIDSplitsCollection";
+            this.battleIDSplitsCollection.ScrollAlwaysVisible = true;
             this.battleIDSplitsCollection.Size = new System.Drawing.Size(355, 319);
             this.battleIDSplitsCollection.TabIndex = 1;
-            this.battleIDSplitsCollection.SelectedIndexChanged += new System.EventHandler(this.battleIDSplitsCollection_SelectedIndexChanged);
+            this.battleIDSplitsCollection.CheckOnClick = true;
+            this.battleIDSplitsCollection.ItemCheck += new ItemCheckEventHandler(this.battleIDSplitsCollection_ItemCheckChanged);
             // 
             // Settings
             // 
@@ -62,6 +66,7 @@ namespace Livesplit.CS3
             this.Controls.Add(this.skipButtonBox);
             this.Name = "Settings";
             this.Size = new System.Drawing.Size(399, 576);
+            this.Load += new System.EventHandler(this.Settings_Load);
             this.ResumeLayout(false);
         }
 

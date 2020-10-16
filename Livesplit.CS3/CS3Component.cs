@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
-using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 using System.Xml;
@@ -31,7 +29,6 @@ namespace Livesplit.CS3
         
         public string ComponentName { get; }
 
-        private readonly Dictionary<BattleEnums, FieldInfo> _battleSplitFieldInfos;
 
         public CS3Component(LiveSplitState state, string name)
         {
@@ -53,22 +50,7 @@ namespace Livesplit.CS3
             _drawStartLoad = false;
             _initFieldLoad = false;
             _keyboard = new InputSimulator();
-            _battleSplitFieldInfos = new Dictionary<BattleEnums, FieldInfo>();
-            foreach (BattleEnums enums in Enum.GetValues(typeof(BattleEnums))) // Cache the FieldInfos for lesser reflection usage
-            {
-                try
-                {
-                    _battleSplitFieldInfos.Add(enums, typeof(Settings).GetField(enums.ToString()));
-                }
-                catch (Exception e)
-                {
-                    Logger.Log(e.ToString());
-                    // Ignored
-                }
-                
-            }
-
-
+            
         }
         
         public void Update(IInvalidator invalidator, LiveSplitState state, float width, float height, LayoutMode mode)
@@ -170,7 +152,7 @@ namespace Livesplit.CS3
         {
             
 
-            if (!(_battleSplitFieldInfos[endedBattle]?.GetValue(_settings) as bool? ?? false)) return; // If the setting is false, or it doesn't exist, return
+            if (!_settings.currentBattleSettings.Contains(endedBattle)) return; // If the setting is false, or it doesn't exist, return
 
             Logger.Log("Running a split with enum " + endedBattle);
             _model.Split();
@@ -194,43 +176,18 @@ namespace Livesplit.CS3
 
         public XmlNode GetSettings(XmlDocument document)
         {
-            // XmlSerializer serializer = new XmlSerializer(typeof(Settings)); XMLSerializer breaks lol 
-            
-            // This runs in a fucking loop apparently so Reflection over it is awful but like typing all the settings out is awful too dude
-            
-            XmlElement xmlSettings = document.CreateElement("Settings");
-
-            // serializer.Serialize(TextWriter.Null, _settings);
-            foreach (FieldInfo setting in _battleSplitFieldInfos.Values.Where(field => field.FieldType == typeof(bool)))
-            {
-                XmlElement element = document.CreateElement(setting.Name);
-                element.InnerText = ((bool)setting.GetValue(_settings)).ToString();
-                xmlSettings.AppendChild(element);
-            }
-            
-            /*////
-            XmlElement skipBattleAnims = document.CreateElement(nameof(Settings.SkipBattleAnimations));
-            skipBattleAnims.InnerText = _settings.SkipBattleAnimations.ToString();
-            xmlSettings.AppendChild(skipBattleAnims);
-            */
-
-            return xmlSettings;
+            // I have no idea why you're supposed to serialize on something called GetSettings but take it up with Livesplit and not me
+            return _settings.Serialize(document);
         }
 
         public void SetSettings(XmlNode settings)
         {
-            XmlNode skipBattleAnimsNode = settings.SelectSingleNode(".//" + nameof(Settings.SkipBattleAnimations));
-            if (bool.TryParse(skipBattleAnimsNode?.InnerText, out bool skipBattleAnims))
-            {
-                _settings.SkipBattleAnimations = skipBattleAnims;
-            }
-            
+            // Same as above but with Deserializing
+            _settings.Deserialize(settings);
         }
 
         public void Dispose()
         {
-            //remember to unhook if I ever hook anything
-      
             UnhookDelegates();
             _manager.Dispose();
         }
