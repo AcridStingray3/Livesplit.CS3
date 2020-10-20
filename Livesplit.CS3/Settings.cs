@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Windows.Forms;
 using System.Xml;
 
@@ -10,7 +9,8 @@ namespace Livesplit.CS3
     {
         public bool SkipBattleAnimations = true;
 
-        private readonly Dictionary<string, BattleEnums> displayedSettings = new Dictionary<string, BattleEnums> // Since Serialization happens on a loop because Livesplit is bad, it's better to write "_" instead of spaces so that String.Replace() is used less often
+        // I kinda wanna yeet this to its own file, since this is already a sealed class, just for a scalability where you don't even need to open the main settings file. Bit overkill though
+        private readonly Dictionary<string, Enum> displayedSettings = new Dictionary<string, Enum> // Since Serialization happens on a loop because Livesplit is bad, it's better to write "_" instead of spaces so that String.Replace() is used less often
         {
             ["Split_Prologue_Mechs"] = BattleEnums.PrologueMechs,
             ["Split_Prologue_Stahlritter"] = BattleEnums.PrologueStahlritter, 
@@ -21,6 +21,8 @@ namespace Livesplit.CS3
             ["Split_Prologue_Link_Tutorial"] = BattleEnums.LinkTutorial,
             ["Split_Prologue_S-Break_Tutorial"] = BattleEnums.SbreakTutorial,
             ["Split_Prologue_Magic_Knight"] = BattleEnums.PrologueMagicKnight,
+            
+            ["Split_Prologue"] = ChapterEnums.SpringOnceAgain,
         
             // Chapter 1
             ["Split_Chapter_1_Keep_First_Fight"] = BattleEnums.Ch1KeepFirstFight,
@@ -39,7 +41,6 @@ namespace Livesplit.CS3
             ["Split_Chapter_1_Second_Night_Ambush"] = BattleEnums.SecondAmbush,
             ["Split_Chapter_1_Third_Night_Ambush"] = BattleEnums.ThirdAmbush,
             
-            
             ["Split_Chapter_1_Danghorns"] = BattleEnums.Danghorns,
             ["Split_Chapter_1_Mothros"] = BattleEnums.Mothros,
             ["Split_Chapter_1_First_Hamel_Road_Ambush"] = BattleEnums.FirstHamelRoad,
@@ -47,12 +48,24 @@ namespace Livesplit.CS3
             ["Split_Chapter_1_Blue_Aion_I"] = BattleEnums.PreBlueAion,
             ["Split_Chapter_1_Blue_Aion_II"] = BattleEnums.BlueAion,
             
+            ["Split_Chapter_1"] = ChapterEnums.Reunion,
+            
             // Chapter 2 
             ["Split_Chapter_2_Keep_First_Fight"] = BattleEnums.Ch2KeepFirstFight,
             ["Split_Chapter_2_Stratos_Diver"] = BattleEnums.StratosDiver,
+            
+            ["Split_Chapter_2"] = ChapterEnums.ConflictInCrossbell,
+            
+            
+            ["Split_Chapter_3"] = ChapterEnums.PulseOfSteel,
+            
+            
+            ["Split_Chapter_4"] = ChapterEnums.RadiantHeimdallr,
+            
+            
         };
 
-        public readonly HashSet<BattleEnums> currentBattleSettings;
+        public readonly HashSet<Enum> currentSplitSettings;
 
         public Settings()
         {
@@ -62,26 +75,26 @@ namespace Livesplit.CS3
 
             Load += LoadLayout;
 
-            currentBattleSettings = new HashSet<BattleEnums>();
+            currentSplitSettings = new HashSet<Enum>();
             
         }
         
-        private void battleIDSplitsCollection_ItemCheckChanged(object sender, ItemCheckEventArgs e)
+        private void SplitsCollection_ItemCheckChanged(object sender, ItemCheckEventArgs e)
         {
-            BattleEnums setting = displayedSettings[battleIDSplitsCollection.Items[e.Index].ToString().Replace(' ', '_')];
+            Enum setting = displayedSettings[SplitsCollection.Items[e.Index].ToString().Replace(' ', '_')];
             if (e.NewValue == CheckState.Checked)
-                currentBattleSettings.Add(setting);
+                currentSplitSettings.Add(setting);
             else
-                currentBattleSettings.Remove(setting);
+                currentSplitSettings.Remove(setting);
         }
 
         private void LoadLayout(object sender, EventArgs e)
         {
             skipButtonBox.Checked = SkipBattleAnimations;
-            for (int i = 0; i < battleIDSplitsCollection.Items.Count; ++i)
+            for (int i = 0; i < SplitsCollection.Items.Count; ++i)
             {
-                if (currentBattleSettings.Contains(displayedSettings[ ((string)battleIDSplitsCollection.Items[i]).Replace(' ', '_')])) 
-                    battleIDSplitsCollection.SetItemChecked(i, true);
+                if (currentSplitSettings.Contains(displayedSettings[ ((string)SplitsCollection.Items[i]).Replace(' ', '_')])) 
+                    SplitsCollection.SetItemChecked(i, true);
             }
         }
 
@@ -102,7 +115,7 @@ namespace Livesplit.CS3
             foreach (string battleSplit in displayedSettings.Keys)
             {
                 element = document.CreateElement(battleSplit);
-                element.InnerText = currentBattleSettings.Contains(displayedSettings[battleSplit]).ToString();
+                element.InnerText = currentSplitSettings.Contains(displayedSettings[battleSplit]).ToString();
                 xmlSettings.AppendChild(element);
             }
             
@@ -122,7 +135,7 @@ namespace Livesplit.CS3
                 XmlNode node = settings.SelectSingleNode(".//" + battleSplit);
                 if (!bool.TryParse(node?.InnerText, out bool splitSetting)) continue;
                 if (splitSetting)
-                    currentBattleSettings.Add(displayedSettings[battleSplit]);
+                    currentSplitSettings.Add(displayedSettings[battleSplit]);
             }
         }
     }

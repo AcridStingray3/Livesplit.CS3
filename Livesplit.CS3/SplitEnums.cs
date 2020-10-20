@@ -43,9 +43,15 @@
         Ch2KeepFirstFight = 310,
         StratosDiver = 311,
         
+    }
 
-
-
-
+    public enum ChapterEnums : int
+    {
+        SpringOnceAgain = 0,
+        Reunion = 1,
+        ConflictInCrossbell = 2,
+        PulseOfSteel = 3,
+        RadiantHeimdallr = 4,
+        ForWhomTheBellTolls = 5  // Never gonna be used because final split is on final boss, but completion's sake ig
     }
 }

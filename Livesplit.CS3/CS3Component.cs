@@ -148,13 +148,13 @@ namespace Livesplit.CS3
             }
         }
         
-        private void CheckBattleSplit(BattleEnums endedBattle)
+        private void CheckSplit<T>(T split) where T: Enum
         {
             
 
-            if (!_settings.currentBattleSettings.Contains(endedBattle)) return; // If the setting is false, or it doesn't exist, return
+            if (!_settings.currentSplitSettings.Contains(split)) return; // If the setting is false, or it doesn't exist, return
 
-            Logger.Log("Running a split with enum " + endedBattle);
+            Logger.Log("Running a split with enum " + split);
             _model.Split();
 
             
@@ -206,8 +206,12 @@ namespace Livesplit.CS3
             _manager.Monitor.Handlers += CheckLoading;
             Logger.Log("LogFileMonitor hooked to Loading!");
             
-            _manager.OnBattleEnd += CheckBattleSplit;
-            Logger.Log("OnBattleEnd hooked to BattleSplit!");
+            _manager.OnBattleEnd += CheckSplit;
+            Logger.Log("OnBattleEnd hooked to Split!");
+
+            _manager.OnChapterEnd += CheckSplit;
+            Logger.Log("OnChapterEnd hooked to Split!");
+
             
             if (_settings.SkipBattleAnimations)
             {
@@ -226,7 +230,10 @@ namespace Livesplit.CS3
             
             Logger.Log("Unsubscribing events...");
             
-            _manager.OnBattleEnd -= CheckBattleSplit;
+            _manager.OnBattleEnd -= CheckSplit;
+            Logger.Log("OnBattleEnd unhooked from BattleSplit!");
+
+            _manager.OnChapterEnd -= CheckSplit;
             Logger.Log("OnBattleEnd unhooked from BattleSplit!");
 
             if (_settings.SkipBattleAnimations)

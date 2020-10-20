@@ -34,7 +34,7 @@
         private void InitializeComponent()
         {
             this.skipButtonBox = new System.Windows.Forms.CheckBox();
-            this.battleIDSplitsCollection = new System.Windows.Forms.CheckedListBox();
+            this.SplitsCollection = new System.Windows.Forms.CheckedListBox();
             this.SuspendLayout();
             // 
             // skipButtonBox
@@ -48,21 +48,21 @@
             // 
             // battleIDSplitsCollection
             // 
-            this.battleIDSplitsCollection.FormattingEnabled = true;
-            this.battleIDSplitsCollection.Items.AddRange(displayedSettings.Keys.Select(x => x.Replace("_", " ")).ToArray());
-            this.battleIDSplitsCollection.Location = new System.Drawing.Point(15, 101);
-            this.battleIDSplitsCollection.Name = "battleIDSplitsCollection";
-            this.battleIDSplitsCollection.ScrollAlwaysVisible = true;
-            this.battleIDSplitsCollection.Size = new System.Drawing.Size(355, 319);
-            this.battleIDSplitsCollection.TabIndex = 1;
-            this.battleIDSplitsCollection.CheckOnClick = true;
-            this.battleIDSplitsCollection.ItemCheck += new ItemCheckEventHandler(this.battleIDSplitsCollection_ItemCheckChanged);
+            this.SplitsCollection.FormattingEnabled = true;
+            this.SplitsCollection.Items.AddRange(displayedSettings.Keys.Select(x => x.Replace("_", " ")).ToArray());
+            this.SplitsCollection.Location = new System.Drawing.Point(15, 101);
+            this.SplitsCollection.Name = "SplitsCollection";
+            this.SplitsCollection.ScrollAlwaysVisible = true;
+            this.SplitsCollection.Size = new System.Drawing.Size(355, 319);
+            this.SplitsCollection.TabIndex = 1;
+            this.SplitsCollection.CheckOnClick = true;
+            this.SplitsCollection.ItemCheck += new ItemCheckEventHandler(this.SplitsCollection_ItemCheckChanged);
             // 
             // Settings
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.Controls.Add(this.battleIDSplitsCollection);
+            this.Controls.Add(this.SplitsCollection);
             this.Controls.Add(this.skipButtonBox);
             this.Name = "Settings";
             this.Size = new System.Drawing.Size(399, 576);
@@ -70,7 +70,7 @@
             this.ResumeLayout(false);
         }
 
-        private System.Windows.Forms.CheckedListBox battleIDSplitsCollection;
+        private System.Windows.Forms.CheckedListBox SplitsCollection;
         private System.Windows.Forms.CheckBox skipButtonBox;
 
         #endregion
